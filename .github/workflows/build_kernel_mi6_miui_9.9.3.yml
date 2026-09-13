@@ -436,6 +436,17 @@ jobs:
                   "#define refcount_inc(r) atomic_inc(r)\n"
                   "#define refcount_dec(r) atomic_dec(r)\n"
               ),
+              # 4.16 split compiler_types.h out of compiler.h. 4.4 never had it.
+              "compiler_types.h": "#include <linux/compiler.h>\n",
+              "compiler-types.h": "#include <linux/compiler.h>\n",
+              "compiler_attributes.h": "#include <linux/compiler.h>\n",
+              "build_bug.h": "#include <linux/bug.h>\n",
+              "minmax.h": "#include <linux/kernel.h>\n",
+              "bits.h": "#include <linux/bitops.h>\n",
+              "align.h": "#include <linux/kernel.h>\n",
+              "container_of.h": "#include <linux/kernel.h>\n",
+              "lockdep_types.h": "#include <linux/lockdep.h>\n",
+              "unaligned.h": "#include <asm/unaligned.h>\n",
           }
           needed = set(stub_bodies)
           for src in ksu_dir.rglob("*"):
