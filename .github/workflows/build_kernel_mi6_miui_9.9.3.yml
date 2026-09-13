@@ -374,18 +374,16 @@ jobs:
         run: |
           # Only ${{ env.DEVICE_NAME }} use it.
           cd $GITHUB_WORKSPACE/device_kernel
-          # 4.4 + manual hook: keep KSU enabled even if OverlayFS was off in stock defconfig.
+          # v0.9.5 Kconfig: config KSU depends on OVERLAY_FS.
           echo "CONFIG_OVERLAY_FS=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # Satisfy LXC/DOCKER bridge dependency warnings on 4.4.
           if [[ "${{ env.LXC_ENABLE }}" == "true" ]]; then
             echo "CONFIG_BRIDGE=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
             echo "CONFIG_VLAN_8021Q=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
             echo "CONFIG_BRIDGE_VLAN_FILTERING=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           fi
-          # rsuntk apk_sign.c: ksu_sha256() returns int. IS_ERR() expects a pointer;
-          # on 4.4 that warning is treated as an error. Do not cast the int to (void *).
-          APK_SIGN="KernelSU/kernel/manager/apk_sign.c"
+          # v0.9.5 apk_sign.c: ksu_sha256() returns int. IS_ERR() expects a pointer.
+          APK_SIGN="KernelSU/kernel/apk_sign.c"
           if [ ! -f "$APK_SIGN" ]; then
             echo "ERROR: $APK_SIGN not found, cannot apply ksu_sha256 patch"
             exit 1

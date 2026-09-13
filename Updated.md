@@ -1,4 +1,12 @@
 ## 项目更新日志
+- **Ver.1.4 Fixed 29**
+    - 小米6 (sagit) KernelSU 钉死官方 tiann v0.9.5，去掉 rsuntk `main` 专用补丁
+    - 保留 4.4 上 `apk_sign.c` 的 `ksu_sha256() < 0` 修补（v0.9.5 仍有此写法）
+    - 更新 支持列表：请安装官方 KernelSU v0.9.5 管理器
+
+- **Ver.1.4 Fixed 28**
+    - 修补 小米6 (sagit) rsuntk `dispatch.c`：`do_nuke_ext4_sysfs` 的 `cmd.arg`（`__aligned_u64`）需转为用户指针后再传给 `ksu_strncpy_from_user_nofault`
+
 - **Ver.1.4 Fixed 27**
     - 修补 小米6 (sagit) rsuntk `apk_sign.c`：`ksu_sha256()` 返回 int，不能用 `IS_ERR()`（4.4 会把该警告当错误）
 
