@@ -525,6 +525,44 @@ jobs:
                       if patched_src != src:
                           cfile.write_text(patched_src)
                           print("Included kernel_compat.h in %s" % cfile)
+
+          # 4.4 group_info has blocks[] (GROUP_AT), not gid[]. groups_sort is not
+          # exported until 4.9. seccomp.filter_count arrived in 5.9.
+          for cfile in ksu_dir.rglob("*.c"):
+              src = cfile.read_text()
+              orig = src
+              if "group_info->gid[" in src and "GROUP_AT(group_info" not in src:
+                  src = re.sub(
+                      r"^(\s*)group_info->gid\[i\] = kgid;",
+                      r"#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)\n"
+                      r"\1group_info->gid[i] = kgid;\n"
+                      r"#else\n"
+                      r"\1GROUP_AT(group_info, i) = kgid;\n"
+                      r"#endif",
+                      src,
+                      flags=re.M,
+                  )
+              if "seccomp.filter_count" in src and "KERNEL_VERSION(5, 9, 0)" not in src:
+                  src = re.sub(
+                      r"^(\s*)atomic_set\(&current->seccomp\.filter_count, 0\);",
+                      r"#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)\n"
+                      r"\1atomic_set(&current->seccomp.filter_count, 0);\n"
+                      r"#endif",
+                      src,
+                      flags=re.M,
+                  )
+              if "groups_sort(" in src and "/* ksu-compat groups_sort */" not in src:
+                  src = re.sub(
+                      r"^(\s*)groups_sort\s*\(([^)]*)\)\s*;",
+                      r"#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0) /* ksu-compat groups_sort */\n"
+                      r"\1groups_sort(\2);\n"
+                      r"#endif",
+                      src,
+                      flags=re.M,
+                  )
+              if src != orig:
+                  cfile.write_text(src)
+                  print("Patched 4.4 group/seccomp APIs in %s" % cfile)
           PY
           # echo "CONFIG_CPU_BIG_ENDIAN=n" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_COMPAT_VDSO=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
