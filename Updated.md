@@ -1,4 +1,7 @@
 ## 项目更新日志
+- **Ver.1.4 Fixed 27**
+    - 修补 小米6 (sagit) rsuntk `apk_sign.c`：`ksu_sha256()` 返回 int，不能用 `IS_ERR()`（4.4 会把该警告当错误）
+
 - **Ver.1.4 Fixed 26**
     - 切换 小米6 (sagit) KernelSU 至 rsuntk（SukiSU-Ultra v4.1.0 不兼容 4.4）
     - 移除该设备 workflow 中针对 SukiSU v4.1.0 的 4.4 兼容补丁
