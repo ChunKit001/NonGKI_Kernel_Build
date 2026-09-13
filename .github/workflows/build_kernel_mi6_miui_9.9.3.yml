@@ -383,6 +383,50 @@ jobs:
             echo "CONFIG_VLAN_8021Q=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
             echo "CONFIG_BRIDGE_VLAN_FILTERING=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           fi
+          # SukiSU-Ultra v4.1.0 targets newer kernels / the miuix branch.
+          # sagit is 4.4 and checks out tag v4.1.0, so apply local shims.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ksu = Path("drivers/kernelsu/ksu.c")
+          if ksu.exists():
+              text = ksu.read_text()
+              if "MODULE_IMPORT_NS" in text and "#ifndef MODULE_IMPORT_NS" not in text:
+                  text = text.replace(
+                      'MODULE_LICENSE("GPL");',
+                      '#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\nMODULE_LICENSE("GPL");',
+                      1,
+                  )
+                  ksu.write_text(text)
+                  print("Patched MODULE_IMPORT_NS for pre-5.4 kernels.")
+
+          kbuild = Path("drivers/kernelsu/Kbuild")
+          if kbuild.exists():
+              text = kbuild.read_text()
+              patched = text.replace("REPO_BRANCH := miuix", "REPO_BRANCH := HEAD")
+              if patched != text:
+                  kbuild.write_text(patched)
+                  print("Patched Kbuild REPO_BRANCH miuix -> HEAD.")
+
+          compat = Path("drivers/kernelsu/kernel_compat.h")
+          if compat.exists():
+              text = compat.read_text()
+              if "copy_from_user_nofault" in text and "probe_kernel_read" not in text:
+                  shim = (
+                      "#include <linux/version.h>\n"
+                      "#include <linux/uaccess.h>\n"
+                      "#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)\n"
+                      "#ifndef copy_from_user_nofault\n"
+                      "#define copy_from_user_nofault probe_kernel_read\n"
+                      "#endif\n"
+                      "#endif\n\n"
+                  )
+                  marker = "static long ksu_copy_from_user_retry"
+                  if marker in text:
+                      text = text.replace(marker, shim + marker, 1)
+                      compat.write_text(text)
+                      print("Patched copy_from_user_nofault for pre-5.8 kernels.")
+          PY
           # echo "CONFIG_CPU_BIG_ENDIAN=n" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_COMPAT_VDSO=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_LTO_NONE=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
