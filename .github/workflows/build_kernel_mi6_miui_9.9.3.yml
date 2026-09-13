@@ -386,9 +386,12 @@ jobs:
           # SukiSU-Ultra v4.1.0 targets newer kernels / the miuix branch.
           # sagit is 4.4 and checks out tag v4.1.0, so apply local shims.
           python3 - <<'PY'
+          import re
           from pathlib import Path
 
-          ksu = Path("drivers/kernelsu/ksu.c")
+          ksu_dir = Path("drivers/kernelsu")
+
+          ksu = ksu_dir / "ksu.c"
           if ksu.exists():
               text = ksu.read_text()
               if "MODULE_IMPORT_NS" in text and "#ifndef MODULE_IMPORT_NS" not in text:
@@ -400,7 +403,7 @@ jobs:
                   ksu.write_text(text)
                   print("Patched MODULE_IMPORT_NS for pre-5.4 kernels.")
 
-          kbuild = Path("drivers/kernelsu/Kbuild")
+          kbuild = ksu_dir / "Kbuild"
           if kbuild.exists():
               text = kbuild.read_text()
               patched = text.replace("REPO_BRANCH := miuix", "REPO_BRANCH := HEAD")
@@ -408,7 +411,7 @@ jobs:
                   kbuild.write_text(patched)
                   print("Patched Kbuild REPO_BRANCH miuix -> HEAD.")
 
-          compat = Path("drivers/kernelsu/kernel_compat.h")
+          compat = ksu_dir / "kernel_compat.h"
           if compat.exists():
               text = compat.read_text()
               if "copy_from_user_nofault" in text and "probe_kernel_read" not in text:
@@ -424,8 +427,61 @@ jobs:
                   marker = "static long ksu_copy_from_user_retry"
                   if marker in text:
                       text = text.replace(marker, shim + marker, 1)
-                      compat.write_text(text)
                       print("Patched copy_from_user_nofault for pre-5.8 kernels.")
+
+              # 4.4: kernel_write(file, const char *buf, size_t, loff_t)
+              # 4.14+: kernel_write(file, const void *buf, size_t, loff_t *)
+              # Casting buf to const void * does not fix 4.4.
+              if "ksu_kernel_write_compat" not in text:
+                  rw_shim = (
+                      "\n#include <linux/fs.h>\n"
+                      "#include <linux/version.h>\n"
+                      "#ifndef TWA_RESUME\n"
+                      "#define TWA_RESUME true\n"
+                      "#endif\n"
+                      "#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)\n"
+                      "static inline ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count, loff_t *pos)\n"
+                      "{\n"
+                      "	loff_t offset = pos ? *pos : 0;\n"
+                      "	ssize_t result = kernel_read(p, offset, (char *)buf, count);\n"
+                      "	if (pos && result > 0)\n"
+                      "		*pos = offset + result;\n"
+                      "	return result;\n"
+                      "}\n"
+                      "static inline ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t count, loff_t *pos)\n"
+                      "{\n"
+                      "	loff_t offset = pos ? *pos : 0;\n"
+                      "	ssize_t result = kernel_write(p, (const char *)buf, count, offset);\n"
+                      "	if (pos && result > 0)\n"
+                      "		*pos = offset + result;\n"
+                      "	return result;\n"
+                      "}\n"
+                      "#define kernel_read(p, buf, count, pos) ksu_kernel_read_compat(p, buf, count, pos)\n"
+                      "#define kernel_write(p, buf, count, pos) ksu_kernel_write_compat(p, buf, count, pos)\n"
+                      "#endif\n"
+                  )
+                  guard = text.rfind("#endif")
+                  if guard != -1:
+                      text = text[:guard] + rw_shim + "\n" + text[guard:]
+                      print("Patched kernel_read/write and TWA_RESUME for pre-4.14 kernels.")
+              compat.write_text(text)
+
+              def ensure_include(src):
+                  if '#include "kernel_compat.h"' in src:
+                      return src
+                  matches = list(re.finditer(r"^#include .+$", src, re.M))
+                  if not matches:
+                      return '#include "kernel_compat.h"\n' + src
+                  last = matches[-1]
+                  return src[: last.end()] + '\n#include "kernel_compat.h"' + src[last.end() :]
+
+              for cfile in ksu_dir.rglob("*.c"):
+                  src = cfile.read_text()
+                  if any(tok in src for tok in ("kernel_read(", "kernel_write(", "TWA_RESUME")):
+                      patched_src = ensure_include(src)
+                      if patched_src != src:
+                          cfile.write_text(patched_src)
+                          print("Included kernel_compat.h in %s" % cfile)
           PY
           # echo "CONFIG_CPU_BIG_ENDIAN=n" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_COMPAT_VDSO=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
