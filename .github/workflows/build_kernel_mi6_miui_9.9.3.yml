@@ -422,6 +422,27 @@ jobs:
               '#endif' >> "$COMPAT"
             echo "Patched $COMPAT : wrap strscpy for pre-5.2 kernels"
           fi
+          # prctl args are unsigned long; 4.4 copy_to/from_user wants void __user *.
+          CORE="KernelSU/kernel/core_hook.c"
+          if [ ! -f "$CORE" ]; then
+            echo "ERROR: $CORE not found, cannot patch copy_to_user args"
+            exit 1
+          fi
+          if grep -q 'copy_to_user((void __user \*)arg3,' "$CORE"; then
+            echo "core_hook.c already casts prctl args for copy_*_user"
+          else
+            sed -i \
+              -e 's/copy_to_user(arg3,/copy_to_user((void __user *)arg3,/g' \
+              -e 's/copy_to_user(arg4,/copy_to_user((void __user *)arg4,/g' \
+              -e 's/copy_from_user(\&profile, arg3,/copy_from_user(\&profile, (void __user *)arg3,/g' \
+              -e 's/handle_sepolicy(arg3, arg4)/handle_sepolicy(arg3, (void __user *)arg4)/g' \
+              "$CORE"
+            if ! grep -q 'copy_to_user((void __user \*)arg3,' "$CORE"; then
+              echo "ERROR: failed to patch copy_to_user(arg3) in $CORE"
+              exit 1
+            fi
+            echo "Patched $CORE : cast prctl arg3/arg4 to void __user *"
+          fi
           # echo "CONFIG_CPU_BIG_ENDIAN=n" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_COMPAT_VDSO=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_LTO_NONE=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
