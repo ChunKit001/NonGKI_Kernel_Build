@@ -1,4 +1,9 @@
 ## 项目更新日志
+- **Ver.1.4 Fixed 25**
+    - 增加 小米6 (sagit) MIUI 9.9.3 设备
+    - 启用该设备 SukiSU-Ultra 与实验性 LXC 编译支持
+    - 增加 支持列表 对应说明
+
 - **Ver.1.4 Fixed 24**
     - 切换 小米11 Ultra HyperOS A14 KernelSU分支至rsuntk
     
