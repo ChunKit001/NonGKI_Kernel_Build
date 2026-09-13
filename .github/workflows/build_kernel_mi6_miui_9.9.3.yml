@@ -397,21 +397,30 @@ jobs:
             echo "ERROR: expected IS_ERR(ksu_sha256(...)) not found in $APK_SIGN"
             exit 1
           fi
-          # 4.4 strscpy is __must_check; gcc-wrapper treats unused result as error.
-          # Do not return -ENAMETOOLONG from the filldir actor.
-          THRONE="KernelSU/kernel/throne_tracker.c"
-          if [ ! -f "$THRONE" ]; then
-            echo "ERROR: $THRONE not found, cannot apply strscpy patch"
+          # 4.4 strscpy is __must_check. (void)strscpy() does not silence
+          # gcc-wrapper, and sed can report success with 0 replacements.
+          COMPAT="KernelSU/kernel/kernel_compat.h"
+          if [ ! -f "$COMPAT" ]; then
+            echo "ERROR: $COMPAT not found, cannot wrap strscpy"
             exit 1
           fi
-          if grep -q '(void)strscpy(' "$THRONE"; then
-            echo "throne_tracker.c already casts strscpy return"
-          elif grep -q 'strscpy(' "$THRONE"; then
-            sed -i 's/\([[:blank:]]\)strscpy(/\1(void)strscpy(/g' "$THRONE"
-            echo "Patched $THRONE : strscpy -> (void)strscpy"
+          if grep -q 'ksu_zeroed_strncpy' "$COMPAT"; then
+            echo "kernel_compat.h already wraps strscpy"
           else
-            echo "ERROR: strscpy not found in $THRONE"
-            exit 1
+            printf '%s\n' \
+              '' \
+              '#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)' \
+              'static inline void ksu_zeroed_strncpy(char *dest, const char *src, size_t count)' \
+              '{' \
+              '	if (!count)' \
+              '		return;' \
+              '	__builtin_memset(dest, 0, count);' \
+              '	__builtin_strncpy(dest, src, count - 1);' \
+              '}' \
+              '#define strscpy ksu_zeroed_strncpy' \
+              '#define strscpy_pad ksu_zeroed_strncpy' \
+              '#endif' >> "$COMPAT"
+            echo "Patched $COMPAT : wrap strscpy for pre-5.2 kernels"
           fi
           # echo "CONFIG_CPU_BIG_ENDIAN=n" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_COMPAT_VDSO=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}

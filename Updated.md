@@ -1,4 +1,7 @@
 ## 项目更新日志
+- **Ver.1.4 Fixed 31**
+    - 小米6 (sagit) 在 v0.9.5 `kernel_compat.h` 中用无返回值封装替换 `strscpy`（4.4 的 `__must_check` 不能靠 `(void)` 消掉）
+
 - **Ver.1.4 Fixed 30**
     - 修补 小米6 (sagit) v0.9.5 `throne_tracker.c`：4.4 的 `strscpy` 带 `__must_check`，忽略返回值会被当成 forbidden warning
 
