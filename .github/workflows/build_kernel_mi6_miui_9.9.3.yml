@@ -407,6 +407,10 @@ jobs:
           if kbuild.exists():
               text = kbuild.read_text()
               patched = text.replace("REPO_BRANCH := miuix", "REPO_BRANCH := HEAD")
+              include_flag = "ccflags-y += -include $(srctree)/$(src)/kernel_compat.h"
+              if include_flag not in patched:
+                  patched = patched.rstrip() + "\n" + include_flag + "\n"
+                  print("Added Kbuild -include kernel_compat.h")
               if patched != text:
                   kbuild.write_text(patched)
                   print("Patched Kbuild REPO_BRANCH miuix -> HEAD.")
@@ -486,7 +490,7 @@ jobs:
                       "static inline ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count, loff_t *pos)\n"
                       "{\n"
                       "	loff_t offset = pos ? *pos : 0;\n"
-                      "	ssize_t result = kernel_read(p, offset, (char *)buf, count);\n"
+                      "	ssize_t result = (kernel_read)(p, offset, (char *)buf, count);\n"
                       "	if (pos && result > 0)\n"
                       "		*pos = offset + result;\n"
                       "	return result;\n"
@@ -494,7 +498,7 @@ jobs:
                       "static inline ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t count, loff_t *pos)\n"
                       "{\n"
                       "	loff_t offset = pos ? *pos : 0;\n"
-                      "	ssize_t result = kernel_write(p, (const char *)buf, count, offset);\n"
+                      "	ssize_t result = (kernel_write)(p, (const char *)buf, count, offset);\n"
                       "	if (pos && result > 0)\n"
                       "		*pos = offset + result;\n"
                       "	return result;\n"
@@ -520,11 +524,14 @@ jobs:
 
               for cfile in ksu_dir.rglob("*.c"):
                   src = cfile.read_text()
+                  orig = src
                   if any(tok in src for tok in ("kernel_read(", "kernel_write(", "TWA_RESUME")):
-                      patched_src = ensure_include(src)
-                      if patched_src != src:
-                          cfile.write_text(patched_src)
-                          print("Included kernel_compat.h in %s" % cfile)
+                      src = ensure_include(src)
+                  src = re.sub(r"(?<![\w])kernel_read\s*\(", "ksu_kernel_read_compat(", src)
+                  src = re.sub(r"(?<![\w])kernel_write\s*\(", "ksu_kernel_write_compat(", src)
+                  if src != orig:
+                      cfile.write_text(src)
+                      print("Rewrote kernel_read/write calls in %s" % cfile)
 
           # 4.4 group_info has blocks[] (GROUP_AT), not gid[]. groups_sort is not
           # exported until 4.9. seccomp.filter_count arrived in 5.9.
