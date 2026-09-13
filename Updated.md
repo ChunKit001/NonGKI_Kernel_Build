@@ -1,4 +1,7 @@
 ## 项目更新日志
+- **Ver.1.4 Fixed 30**
+    - 修补 小米6 (sagit) v0.9.5 `throne_tracker.c`：4.4 的 `strscpy` 带 `__must_check`，忽略返回值会被当成 forbidden warning
+
 - **Ver.1.4 Fixed 29**
     - 小米6 (sagit) KernelSU 钉死官方 tiann v0.9.5，去掉 rsuntk `main` 专用补丁
     - 保留 4.4 上 `apk_sign.c` 的 `ksu_sha256() < 0` 修补（v0.9.5 仍有此写法）

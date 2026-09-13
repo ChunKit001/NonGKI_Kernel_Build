@@ -397,6 +397,22 @@ jobs:
             echo "ERROR: expected IS_ERR(ksu_sha256(...)) not found in $APK_SIGN"
             exit 1
           fi
+          # 4.4 strscpy is __must_check; gcc-wrapper treats unused result as error.
+          # Do not return -ENAMETOOLONG from the filldir actor.
+          THRONE="KernelSU/kernel/throne_tracker.c"
+          if [ ! -f "$THRONE" ]; then
+            echo "ERROR: $THRONE not found, cannot apply strscpy patch"
+            exit 1
+          fi
+          if grep -q '(void)strscpy(' "$THRONE"; then
+            echo "throne_tracker.c already casts strscpy return"
+          elif grep -q 'strscpy(' "$THRONE"; then
+            sed -i 's/\([[:blank:]]\)strscpy(/\1(void)strscpy(/g' "$THRONE"
+            echo "Patched $THRONE : strscpy -> (void)strscpy"
+          else
+            echo "ERROR: strscpy not found in $THRONE"
+            exit 1
+          fi
           # echo "CONFIG_CPU_BIG_ENDIAN=n" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_COMPAT_VDSO=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_LTO_NONE=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
