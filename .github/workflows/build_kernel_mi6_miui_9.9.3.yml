@@ -3,6 +3,7 @@ on:
   workflow_call:
   workflow_dispatch:
 env:
+  PYTHON_VERSION: "2" # Only 2(Ubuntu 22.04) or 3(Any OS Versions).
   PACK_METHOD: "Anykernel3" # Anykernel3 need SOURCE and BRANCH, MKBOOTIMG needn't it.
   KERNELSU_METHOD: "shell" # shell, manual and only.
   PATCHES_SOURCE: "author/source" # [your_name]/[your_patch] -> gooder123/NonGKI_Patcher
@@ -15,7 +16,7 @@ env:
 jobs:
   build:
     name: Build Kernel by ${{ github.actor }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
@@ -115,11 +116,17 @@ jobs:
           if [ $UBUNTU_VERSION == "22.04" ]; then
             sudo apt-get install git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler python2 python3
             sudo apt-get install p7zip p7zip-full -y
+            if [ "${{ env.PYTHON_VERSION }}" == "2" ]; then
+              sudo ln -sf /usr/bin/python2.7 /usr/bin/python
+              sudo ln -sf /usr/bin/python2.7 /usr/bin/python2
+            fi
           else
             sudo apt-get install git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler python3
             sudo apt-get install zstd libc6 binutils libc6-dev-i386 gcc g++ p7zip p7zip-full -y
           fi
 
+          python2 --version
+          which python2
       - name: Set Compile Environment
         run: |
           cd $GITHUB_WORKSPACE
@@ -142,6 +149,12 @@ jobs:
               unzip gcc-64.zip -d gcc-64/
             fi
             GCC_64_BIN=aarch64-linux-android-
+            if [ ! -x "$GITHUB_WORKSPACE/gcc-64/bin/${GCC_64_BIN}gcc" ]; then
+              echo "GCC 64 toolchain missing after clone:"
+              ls -la "$GITHUB_WORKSPACE/gcc-64" || true
+              ls -la "$GITHUB_WORKSPACE/gcc-64/bin" || true
+              exit 1
+            fi
             echo "GCC_64=CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-64/bin/$GCC_64_BIN" >> $GITHUB_ENV
           fi
 
@@ -164,6 +177,12 @@ jobs:
               unzip gcc-32.zip -d gcc-32/
             fi
             GCC_32_BIN=arm-linux-androideabi-
+            if [ ! -x "$GITHUB_WORKSPACE/gcc-32/bin/${GCC_32_BIN}gcc" ]; then
+              echo "GCC 32 toolchain missing after clone:"
+              ls -la "$GITHUB_WORKSPACE/gcc-32" || true
+              ls -la "$GITHUB_WORKSPACE/gcc-32/bin" || true
+              exit 1
+            fi
             echo "GCC_32=CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/$GCC_32_BIN" >> $GITHUB_ENV
           fi
 
@@ -355,6 +374,12 @@ jobs:
         run: |
           # Only ${{ env.DEVICE_NAME }} use it.
           cd $GITHUB_WORKSPACE/device_kernel
+          # Satisfy LXC/DOCKER bridge dependency warnings on 4.4.
+          if [[ "${{ env.LXC_ENABLE }}" == "true" ]]; then
+            echo "CONFIG_BRIDGE=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+            echo "CONFIG_VLAN_8021Q=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+            echo "CONFIG_BRIDGE_VLAN_FILTERING=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+          fi
           # echo "CONFIG_CPU_BIG_ENDIAN=n" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_COMPAT_VDSO=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           # echo "CONFIG_LTO_NONE=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
