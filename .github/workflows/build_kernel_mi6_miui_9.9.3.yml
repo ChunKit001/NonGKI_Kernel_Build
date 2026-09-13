@@ -386,26 +386,17 @@ jobs:
           # rsuntk apk_sign.c: ksu_sha256() returns int. IS_ERR() expects a pointer;
           # on 4.4 that warning is treated as an error. Do not cast the int to (void *).
           APK_SIGN="KernelSU/kernel/manager/apk_sign.c"
-          if [ -f "$APK_SIGN" ]; then
-            python3 - "$APK_SIGN" <<'PY'
-import sys
-path = sys.argv[1]
-with open(path, 'r') as f:
-    text = f.read()
-old = 'if (IS_ERR(ksu_sha256(cert, *size4, digest)))'
-new = 'if (ksu_sha256(cert, *size4, digest) < 0)'
-if old not in text:
-    if new in text:
-        print('apk_sign.c already uses ksu_sha256() < 0')
-        sys.exit(0)
-    print('ERROR: expected IS_ERR(ksu_sha256(...)) not found in', path)
-    sys.exit(1)
-with open(path, 'w') as f:
-    f.write(text.replace(old, new, 1))
-print('Patched', path, ': IS_ERR(ksu_sha256) -> ksu_sha256 < 0')
-PY
-          else
+          if [ ! -f "$APK_SIGN" ]; then
             echo "ERROR: $APK_SIGN not found, cannot apply ksu_sha256 patch"
+            exit 1
+          fi
+          if grep -q 'if (ksu_sha256(cert, \*size4, digest) < 0)' "$APK_SIGN"; then
+            echo "apk_sign.c already uses ksu_sha256() < 0"
+          elif grep -q 'if (IS_ERR(ksu_sha256(cert, \*size4, digest)))' "$APK_SIGN"; then
+            sed -i 's/if (IS_ERR(ksu_sha256(cert, \*size4, digest)))/if (ksu_sha256(cert, *size4, digest) < 0)/' "$APK_SIGN"
+            echo "Patched $APK_SIGN : IS_ERR(ksu_sha256) -> ksu_sha256 < 0"
+          else
+            echo "ERROR: expected IS_ERR(ksu_sha256(...)) not found in $APK_SIGN"
             exit 1
           fi
           # echo "CONFIG_CPU_BIG_ENDIAN=n" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
