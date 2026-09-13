@@ -411,6 +411,49 @@ jobs:
                   kbuild.write_text(patched)
                   print("Patched Kbuild REPO_BRANCH miuix -> HEAD.")
 
+          # 4.11 split linux/sched/*.h out of sched.h; 4.4 still keeps them in sched.h.
+          # Drop stubs so every SukiSU file can keep its upstream includes.
+          include_linux = Path("include/linux")
+          stub_bodies = {
+              "sched/signal.h": "#include <linux/sched.h>\n#include <linux/signal.h>\n",
+              "sched/mm.h": "#include <linux/sched.h>\n#include <linux/mm.h>\n",
+              "sched/task.h": "#include <linux/sched.h>\n",
+              "sched/user.h": "#include <linux/sched.h>\n",
+              "sched/task_stack.h": "#include <linux/sched.h>\n",
+              "sched/clock.h": "#include <linux/sched.h>\n",
+              "sched/cputime.h": "#include <linux/sched.h>\n",
+              "sched/types.h": "#include <linux/sched.h>\n",
+              "refcount.h": (
+                  "#include <linux/atomic.h>\n"
+                  "typedef atomic_t refcount_t;\n"
+                  "#define REFCOUNT_INIT(x) ATOMIC_INIT(x)\n"
+                  "#define refcount_read(r) atomic_read(r)\n"
+                  "#define refcount_set(r, n) atomic_set(r, n)\n"
+                  "#define refcount_inc(r) atomic_inc(r)\n"
+                  "#define refcount_dec(r) atomic_dec(r)\n"
+              ),
+          }
+          needed = set(stub_bodies)
+          for src in ksu_dir.rglob("*"):
+              if src.suffix not in (".c", ".h"):
+                  continue
+              for match in re.finditer(r"#include\s*<linux/([^>]+)>", src.read_text(errors="ignore")):
+                  needed.add(match.group(1))
+          for rel in sorted(needed):
+              dest = include_linux / rel
+              if dest.exists():
+                  continue
+              body = stub_bodies.get(rel)
+              if body is None and rel.startswith("sched/"):
+                  body = "#include <linux/sched.h>\n"
+              if not body:
+                  print("WARNING: missing header linux/%s (no stub)" % rel)
+                  continue
+              guard = "_KSU_COMPAT_" + rel.replace("/", "_").replace(".", "_").upper()
+              dest.parent.mkdir(parents=True, exist_ok=True)
+              dest.write_text("#ifndef %s\n#define %s\n%s#endif\n" % (guard, guard, body))
+              print("Created stub header include/linux/%s" % rel)
+
           compat = ksu_dir / "kernel_compat.h"
           if compat.exists():
               text = compat.read_text()
